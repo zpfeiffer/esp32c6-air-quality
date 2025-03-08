@@ -1,13 +1,18 @@
 #![no_std]
 #![no_main]
 
+use air::led::SmartLedsAdapter;
 use defmt::info;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
+use esp_hal::rmt::Rmt;
+use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
 use panic_rtt_target as _;
+use smart_leds::hsv::{hsv2rgb, Hsv};
+use smart_leds::{brightness, gamma, SmartLedsWrite};
 
 extern crate alloc;
 
@@ -38,10 +43,39 @@ async fn main(spawner: Spawner) {
     // TODO: Spawn some tasks
     let _ = spawner;
 
+    let led_pin = peripherals.GPIO8;
+    let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).unwrap();
+
+    // Num LEDs (1) * num channels (r,g,b -> 3) * pulses per channel (8) = 24
+    // + 1 additional pulse for end delimiter = 25
+    let rmt_buffer = [0u32; 25];
+
+    let mut led = SmartLedsAdapter::new(rmt.channel0, led_pin, rmt_buffer);
+
+    let mut color = Hsv {
+        hue: 0,
+        sat: 255,
+        val: 255,
+    };
+
     loop {
         info!("Hello world!");
-        Timer::after(Duration::from_secs(1)).await;
-    }
+        for hue in 0..=255 {
+            color.hue = hue;
 
-    // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-beta.0/examples/src/bin
+            // Convert from HSV to RGB color space
+            let rgb_data = [hsv2rgb(color)];
+
+            // Apply gamma correction
+            let gamma_corrected = gamma(rgb_data.into_iter());
+
+            // Limit brightness to 10/255
+            let brightness_limited = brightness(gamma_corrected, 10);
+
+            // Start RMT operation
+            led.write(brightness_limited).unwrap();
+
+            Timer::after(Duration::from_millis(20)).await;
+        }
+    }
 }
