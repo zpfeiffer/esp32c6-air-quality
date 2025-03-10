@@ -3,6 +3,7 @@ runner = "probe-rs run --chip=esp32c6 --always-print-stacktrace --no-location --
 
 [env]
 DEFMT_LOG="info"
+ESP_WIFI_CONFIG_COUNTRY_CODE="US"
 
 [build]
 rustflags = [
