@@ -2,10 +2,13 @@
 #![no_main]
 
 use air::led::SmartLedsAdapter;
-use defmt::info;
+use air::scd41::Scd41;
+use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
+use esp_hal::i2c::master::{Config, I2c};
+use esp_hal::peripheral::Peripheral;
 use esp_hal::rmt::Rmt;
 use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
@@ -42,6 +45,13 @@ async fn main(spawner: Spawner) {
 
     // TODO: Spawn some tasks
     let _ = spawner;
+
+    let mut scd41 = Scd41::init(peripherals.I2C0, peripherals.GPIO3, peripherals.GPIO2);
+    let serial_number = scd41.sensor.serial_number().await;
+    match serial_number {
+        Ok(num) => info!("got serial number: {}", num),
+        Err(_) => error!("failed to get serial number!"),
+    };
 
     let led_pin = peripherals.GPIO8;
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).unwrap();
