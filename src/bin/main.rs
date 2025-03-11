@@ -3,17 +3,21 @@
 
 use air::led::SmartLedsAdapter;
 use air::scd41::scd41_sensor_task;
+use air::wifi::wifi_init;
 use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::rmt::Rmt;
+use esp_hal::rng::Rng;
 use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
+use esp_wifi::EspWifiController;
 use panic_rtt_target as _;
 use smart_leds::hsv::{hsv2rgb, Hsv};
 use smart_leds::{brightness, gamma, SmartLedsWrite};
+use static_cell::StaticCell;
 
 extern crate alloc;
 
@@ -34,18 +38,21 @@ async fn main(spawner: Spawner) {
     info!("Embassy initialized!");
 
     let timer1 = TimerGroup::new(peripherals.TIMG0);
-    let _init = esp_wifi::init(
-        timer1.timer0,
-        esp_hal::rng::Rng::new(peripherals.RNG),
-        peripherals.RADIO_CLK,
-    )
-    .unwrap();
+
+    static RNG: StaticCell<Rng> = StaticCell::new();
+    let rng = RNG.init_with(|| esp_hal::rng::Rng::new(peripherals.RNG));
+
+    static ESP_WIFI_CONTROLLER: StaticCell<EspWifiController<'static>> = StaticCell::new();
+    let esp_wifi_controller = ESP_WIFI_CONTROLLER
+        .init_with(|| esp_wifi::init(timer1.timer0, rng.clone(), peripherals.RADIO_CLK).unwrap());
+
+    wifi_init(esp_wifi_controller, peripherals.WIFI, spawner, rng).await;
 
     spawner
         .spawn(scd41_sensor_task(
             peripherals.I2C0.into(),
             peripherals.GPIO3.into(),
-            peripherals.GPIO2.into(),
+            peripherals.GPIO23.into(),
         ))
         .unwrap_or_else(|err| error!("failed to spawn SCD41 sensor task: {:?}", err));
 

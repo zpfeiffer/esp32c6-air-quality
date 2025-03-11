@@ -10,11 +10,17 @@ path = "./src/bin/main.rs"
 [dependencies]
 defmt = "0.3.10"
 embassy-net = { version = "0.6.0", features = [
+    "defmt",
     "dhcpv4",
     "medium-ethernet",
     "tcp",
     "udp",
-] }
+    "mdns",
+    "dns",
+    "multicast",
+    "proto-ipv4",
+    "proto-ipv6",
+], default-features = false }
 embedded-io = "0.6.1"
 embedded-io-async = "0.6.1"
 esp-alloc = "0.7.0"
