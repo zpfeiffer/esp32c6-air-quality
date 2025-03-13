@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
+#![feature(impl_trait_in_assoc_type)]
 
+#[deny(clippy::mem_forget)]
 use air::led::SmartLedsAdapter;
 use air::scd41::scd41_sensor_task;
 use air::wifi::wifi_init;
