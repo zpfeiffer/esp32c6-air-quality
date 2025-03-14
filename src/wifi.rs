@@ -2,7 +2,7 @@ use defmt::{debug, error, info};
 use embassy_executor::Spawner;
 use embassy_net::{Runner, StackResources};
 use embassy_time::{Duration, Timer};
-use esp_hal::{peripherals::WIFI, rng::Rng};
+use esp_hal::peripherals::WIFI;
 use esp_wifi::{
     wifi::{ClientConfiguration, Configuration, WifiController, WifiDevice, WifiEvent, WifiState},
     EspWifiController,
@@ -17,11 +17,8 @@ pub async fn wifi_init(
     esp_wifi_controller: &'static mut EspWifiController<'static>,
     wifi_peripheral: WIFI,
     spawner: Spawner,
-    rng: &'static mut Rng,
+    random_seed: u64,
 ) {
-    // TODO: move to main task
-    let seed = (rng.random() as u64) << 32 | rng.random() as u64;
-
     let (controller, interfaces) =
         esp_wifi::wifi::new(esp_wifi_controller, wifi_peripheral).unwrap();
 
@@ -32,7 +29,7 @@ pub async fn wifi_init(
     // Init network stack
     static RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
     let resources = RESOURCES.init_with(|| StackResources::<3>::new());
-    let (stack, runner) = embassy_net::new(wifi_interface, config, resources, seed);
+    let (stack, runner) = embassy_net::new(wifi_interface, config, resources, random_seed);
 
     spawner.must_spawn(connection(controller));
     spawner.must_spawn(net_task(runner));
@@ -52,7 +49,7 @@ pub async fn wifi_init(
 }
 
 #[embassy_executor::task]
-async fn connection(mut controller: WifiController<'static>) {
+async fn connection(mut controller: WifiController<'static>) -> ! {
     debug!("start connection task");
     for capability in controller.capabilities().unwrap() {
         info!("WiFi controller reports capability: {:?}", capability);
@@ -82,16 +79,16 @@ async fn connection(mut controller: WifiController<'static>) {
         debug!("WiFi: about to connect...");
 
         match controller.connect_async().await {
-            Ok(_) => info!("Wifi connected!"),
+            Ok(_) => info!("WiFi connected!"),
             Err(e) => {
                 error!("failed to connect to WiFi: {:?}", e);
-                Timer::after(Duration::from_millis(5000)).await
+                Timer::after_secs(5).await;
             }
         }
     }
 }
 
 #[embassy_executor::task]
-async fn net_task(mut runner: Runner<'static, WifiDevice<'static>>) {
+async fn net_task(mut runner: Runner<'static, WifiDevice<'static>>) -> ! {
     runner.run().await
 }

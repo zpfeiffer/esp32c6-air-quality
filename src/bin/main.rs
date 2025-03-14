@@ -44,11 +44,14 @@ async fn main(spawner: Spawner) {
     static RNG: StaticCell<Rng> = StaticCell::new();
     let rng = RNG.init_with(|| esp_hal::rng::Rng::new(peripherals.RNG));
 
+    // Random seed for embassy_net stack
+    let network_seed = (rng.random() as u64) << 32 | rng.random() as u64;
+
     static ESP_WIFI_CONTROLLER: StaticCell<EspWifiController<'static>> = StaticCell::new();
     let esp_wifi_controller = ESP_WIFI_CONTROLLER
         .init_with(|| esp_wifi::init(timer1.timer0, rng.clone(), peripherals.RADIO_CLK).unwrap());
 
-    wifi_init(esp_wifi_controller, peripherals.WIFI, spawner, rng).await;
+    wifi_init(esp_wifi_controller, peripherals.WIFI, spawner, network_seed).await;
 
     spawner
         .spawn(supervisor(
