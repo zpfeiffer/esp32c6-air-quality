@@ -1,15 +1,23 @@
-use defmt::{error, info};
+use defmt::{debug, error, info};
 use embassy_net::{tcp::TcpSocket, Stack};
-use embassy_time::Timer;
+use embassy_time::{Duration, Timer, WithTimeout};
+use heapless::String;
 use rust_mqtt::{
     client::{client::MqttClient, client_config::ClientConfig},
-    packet::v5::reason_codes::ReasonCode,
+    packet::v5::{publish_packet::QualityOfService, reason_codes::ReasonCode},
     utils::rng_generator::CountingRng,
 };
 use smoltcp::wire::DnsQueryType;
 
+use core::fmt::Write;
+
+use crate::scd41;
+
 #[embassy_executor::task]
 pub async fn client(stack: Stack<'static>) {
+    let mut receiver = scd41::WATCH
+        .receiver()
+        .expect("SCD41 Watch should have capacity for MQTT Receiver");
     let mut rx_buffer = [0; 4096];
     let mut tx_buffer = [0; 4096];
 
@@ -46,13 +54,18 @@ pub async fn client(stack: Stack<'static>) {
             CountingRng(20000),
         );
         config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
-        config.add_client_id("clientId-8rhWgBODCl");
-        config.max_packet_size = 100;
-        let mut recv_buffer = [0; 80];
-        let mut write_buffer = [0; 80];
+        config.max_packet_size = 512;
+        let mut recv_buffer = [0; 1024];
+        let mut write_buffer = [0; 1024];
 
-        let mut client =
-            MqttClient::<_, 5, _>::new(socket, &mut write_buffer, 80, &mut recv_buffer, 80, config);
+        let mut client = MqttClient::<_, 10, _>::new(
+            socket,
+            &mut write_buffer,
+            1024,
+            &mut recv_buffer,
+            1024,
+            config,
+        );
 
         match client.connect_to_broker().await {
             Ok(()) => {
@@ -68,6 +81,35 @@ pub async fn client(stack: Stack<'static>) {
                     continue;
                 }
             },
+        }
+
+        loop {
+            // TODO: MQTT pings
+
+            if let Ok(val) = receiver
+                .changed()
+                .with_timeout(Duration::from_secs(5))
+                .await
+            {
+                debug!("MQTT: receiver got val: {:?}", val);
+                let mut message_string: String<5> = String::new();
+                write!(message_string, "{}", val.co2).unwrap();
+                debug!("MQTT: formatted message: {:?}", message_string);
+                let message = message_string.as_bytes();
+
+                let _ = client
+                    .send_message(
+                        "zachary__/feeds/air",
+                        message,
+                        QualityOfService::QoS1,
+                        false,
+                    )
+                    .await
+                    .map(|_| info!("MQTT: message sent successfully!"))
+                    .map_err(|mqtt_error| error!("Other MQTT Error: {:?}", mqtt_error));
+            } else {
+                error!("MQTT: timed out waiting for SCD41 value");
+            };
         }
     }
 }

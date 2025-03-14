@@ -8,13 +8,13 @@ use esp_hal::{
 };
 use scd4x::Scd4xAsync;
 
-static WATCH: Watch<CriticalSectionRawMutex, AirQuality, 2> = Watch::new();
+pub static WATCH: Watch<CriticalSectionRawMutex, AirQuality, 2> = Watch::new();
 
 #[derive(Debug, Format, Clone)]
 pub struct AirQuality {
     // TODO
     timestamp: Option<()>,
-    co2: u16,
+    pub co2: u16,
     temperature: f32,
     humidity: f32,
 }
