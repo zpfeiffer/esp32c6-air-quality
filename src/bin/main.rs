@@ -4,7 +4,7 @@
 
 #[deny(clippy::mem_forget)]
 use air::led::SmartLedsAdapter;
-use air::scd41::scd41_sensor_task;
+use air::scd41::supervisor;
 use air::wifi::wifi_init;
 use defmt::{error, info};
 use embassy_executor::Spawner;
@@ -51,7 +51,7 @@ async fn main(spawner: Spawner) {
     wifi_init(esp_wifi_controller, peripherals.WIFI, spawner, rng).await;
 
     spawner
-        .spawn(scd41_sensor_task(
+        .spawn(supervisor(
             peripherals.I2C0.into(),
             peripherals.GPIO3.into(),
             peripherals.GPIO23.into(),
@@ -90,7 +90,7 @@ async fn main(spawner: Spawner) {
             // Start RMT operation
             led.write(brightness_limited).unwrap();
 
-            Timer::after(Duration::from_millis(20)).await;
+            Timer::after_millis(20).await;
         }
     }
 }
