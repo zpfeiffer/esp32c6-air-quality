@@ -4,11 +4,11 @@
 
 #[deny(clippy::mem_forget)]
 use air::led::SmartLedsAdapter;
-use air::scd41::supervisor;
+use air::scd41;
 use air::wifi::wifi_init;
 use defmt::{error, info};
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
+use embassy_time::Timer;
 use esp_hal::clock::CpuClock;
 use esp_hal::rmt::Rmt;
 use esp_hal::rng::Rng;
@@ -54,7 +54,7 @@ async fn main(spawner: Spawner) {
     wifi_init(esp_wifi_controller, peripherals.WIFI, spawner, network_seed).await;
 
     spawner
-        .spawn(supervisor(
+        .spawn(scd41::supervisor(
             peripherals.I2C0.into(),
             peripherals.GPIO3.into(),
             peripherals.GPIO23.into(),

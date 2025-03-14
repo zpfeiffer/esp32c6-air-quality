@@ -10,6 +10,7 @@ dependencies = [
  "defmt",
  "embassy-executor",
  "embassy-net",
+ "embassy-sync",
  "embassy-time",
  "embedded-io",
  "embedded-io-async",
@@ -563,6 +564,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b27f41110117a9bf2be385b42535c686b301c8ce3b5ea0a07567e200a63a2239"
 dependencies = [
  "critical-section",
+ "defmt",
  "document-features",
  "embassy-executor",
  "embassy-sync",
