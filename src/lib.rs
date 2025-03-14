@@ -3,5 +3,6 @@
 #![feature(never_type)]
 
 pub mod led;
+pub mod mqtt;
 pub mod scd41;
 pub mod wifi;

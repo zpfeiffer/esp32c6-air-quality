@@ -63,12 +63,17 @@ esp-wifi = { version = "0.13.0", features = [
     "esp-alloc",
     "esp32c6",
     "wifi",
+    "smoltcp",
 ] }
 heapless = { version = "0.8.0", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
 smart-leds = "0.4.0"
 ws2812-spi = "0.5.0"
 scd4x = { version = "0.4.0", features = ["embedded-hal-async", "scd41"] }
+rust-mqtt = { version = "0.3.0", default-features = false, features = [
+    "tls",
+    "no_std",
+] }
 embassy-sync = { version = "0.6.2", features = ["defmt"] }
 
 [profile.dev]
