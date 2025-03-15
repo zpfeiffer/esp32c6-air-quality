@@ -77,7 +77,6 @@ async fn main(spawner: Spawner) {
     };
 
     loop {
-        info!("Hello world!");
         for hue in 0..=255 {
             color.hue = hue;
 

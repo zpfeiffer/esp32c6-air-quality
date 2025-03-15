@@ -47,6 +47,7 @@ smoltcp = { version = "0.12.0", default-features = false, features = [
     "socket-raw",
     "socket-tcp",
     "socket-udp",
+    "socket-mdns",
 ] }
 # for more networking protocol support see https://crates.io/crates/edge-net
 critical-section = "1.2.0"

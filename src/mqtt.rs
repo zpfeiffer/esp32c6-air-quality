@@ -18,17 +18,18 @@ pub async fn client(stack: Stack<'static>) {
     let mut receiver = scd41::WATCH
         .receiver()
         .expect("SCD41 Watch should have capacity for MQTT Receiver");
-    let mut rx_buffer = [0; 4096];
-    let mut tx_buffer = [0; 4096];
 
     loop {
+        let mut rx_buffer = [0; 4096];
+        let mut tx_buffer = [0; 4096];
+
         Timer::after_secs(1).await;
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
 
         socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
 
         let address = match stack
-            .dns_query("broker.hivemq.com", DnsQueryType::A)
+            .dns_query("nas.local", DnsQueryType::A)
             .await
             .map(|a| a[0])
         {
@@ -38,7 +39,7 @@ pub async fn client(stack: Stack<'static>) {
                 continue;
             }
         };
-        info!("resolved broker.hivemq.com to: {}", address);
+        info!("resolved nas.local to: {}", address);
 
         let remote_endpoint = (address, 1883);
         info!("connecting...");
@@ -54,6 +55,8 @@ pub async fn client(stack: Stack<'static>) {
             CountingRng(20000),
         );
         config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
+        config.add_username("air");
+        config.add_password("123456");
         config.max_packet_size = 512;
         let mut recv_buffer = [0; 1024];
         let mut write_buffer = [0; 1024];
@@ -84,8 +87,6 @@ pub async fn client(stack: Stack<'static>) {
         }
 
         loop {
-            // TODO: MQTT pings
-
             if let Ok(val) = receiver
                 .changed()
                 .with_timeout(Duration::from_secs(5))
@@ -97,16 +98,20 @@ pub async fn client(stack: Stack<'static>) {
                 debug!("MQTT: formatted message: {:?}", message_string);
                 let message = message_string.as_bytes();
 
-                let _ = client
-                    .send_message(
-                        "zachary__/feeds/air",
-                        message,
-                        QualityOfService::QoS1,
-                        false,
-                    )
+                match client
+                    .send_message("air", message, QualityOfService::QoS1, false)
                     .await
-                    .map(|_| info!("MQTT: message sent successfully!"))
-                    .map_err(|mqtt_error| error!("Other MQTT Error: {:?}", mqtt_error));
+                {
+                    Ok(()) => info!("MQTT: message sent successfully!"),
+                    Err(ReasonCode::NoMatchingSubscribers) => {
+                        error!("MQTT: no matching subscribers")
+                        // Not our fault, so keep trying
+                    }
+                    Err(err) => {
+                        error!("Other MQTT Error: {:?}", err);
+                        break;
+                    }
+                }
             } else {
                 error!("MQTT: timed out waiting for SCD41 value");
             };
