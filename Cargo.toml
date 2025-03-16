@@ -3,13 +3,13 @@ edition = "2021"
 name = "air"
 version = "0.1.0"
 
-[lib]
-test = false
-bench = false
+# [lib]
+# test = false
+# bench = false
 
 [[bin]]
 name = "air"
-path = "./src/bin/main.rs"
+path = "./src/main.rs"
 harness = false
 
 [dependencies]

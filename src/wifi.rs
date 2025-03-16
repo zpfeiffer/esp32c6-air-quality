@@ -1,6 +1,6 @@
 use defmt::{debug, error, info};
 use embassy_executor::Spawner;
-use embassy_net::{Runner, Stack, StackResources};
+use embassy_net::{Runner, StackResources};
 use embassy_time::{Duration, Timer};
 use esp_hal::peripherals::WIFI;
 use esp_wifi::{
@@ -14,8 +14,6 @@ use crate::mqtt;
 
 const SSID: &str = env!("SSID");
 const PASSWORD: &str = env!("PSK");
-
-pub static STACK: StaticCell<Stack> = StaticCell::new();
 
 pub async fn wifi_init(
     esp_wifi_controller: &'static mut EspWifiController<'static>,
@@ -53,8 +51,6 @@ pub async fn wifi_init(
         }
         Timer::after(Duration::from_millis(500)).await;
     }
-
-    // STACK.init(stack);
 
     spawner.must_spawn(mqtt::client(stack));
 }

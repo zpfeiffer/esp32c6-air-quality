@@ -1,11 +1,9 @@
 #![no_std]
 #![no_main]
 #![feature(impl_trait_in_assoc_type)]
+#![feature(never_type)]
 
 #[deny(clippy::mem_forget)]
-use air::led::SmartLedsAdapter;
-use air::scd41;
-use air::wifi::wifi_init;
 use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_time::Timer;
@@ -16,12 +14,19 @@ use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
 use esp_wifi::EspWifiController;
+use led::SmartLedsAdapter;
 use panic_rtt_target as _;
 use smart_leds::hsv::{hsv2rgb, Hsv};
 use smart_leds::{brightness, gamma, SmartLedsWrite};
 use static_cell::StaticCell;
+use wifi::wifi_init;
 
 extern crate alloc;
+
+mod led;
+mod mqtt;
+mod scd41;
+mod wifi;
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
