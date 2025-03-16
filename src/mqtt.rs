@@ -1,15 +1,13 @@
-use defmt::{debug, error, info};
+use defmt::{debug, error, info, warn};
 use embassy_net::{tcp::TcpSocket, Stack};
 use embassy_time::{Duration, Timer, WithTimeout};
-use heapless::String;
 use rust_mqtt::{
     client::{client::MqttClient, client_config::ClientConfig},
     packet::v5::{publish_packet::QualityOfService, reason_codes::ReasonCode},
     utils::rng_generator::CountingRng,
 };
+use serde_json_core::ser::Error::BufferFull;
 use smoltcp::wire::DnsQueryType;
-
-use core::fmt::Write;
 
 use crate::scd41;
 
@@ -57,16 +55,16 @@ pub async fn client(stack: Stack<'static>) {
         config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
         config.add_username("air");
         config.add_password("123456");
-        config.max_packet_size = 512;
-        let mut recv_buffer = [0; 1024];
-        let mut write_buffer = [0; 1024];
+        config.max_packet_size = 1024;
+        let mut recv_buffer = [0; 2048];
+        let mut write_buffer = [0; 2048];
 
         let mut client = MqttClient::<_, 10, _>::new(
             socket,
             &mut write_buffer,
-            1024,
+            2048,
             &mut recv_buffer,
-            1024,
+            2048,
             config,
         );
 
@@ -86,35 +84,45 @@ pub async fn client(stack: Stack<'static>) {
             },
         }
 
-        loop {
-            if let Ok(val) = receiver
-                .changed()
-                .with_timeout(Duration::from_secs(5))
+        while let Ok(val) = receiver
+            .changed()
+            .with_timeout(Duration::from_secs(5))
+            .await
+            .map_err(|_timeout_error| error!("MQTT: timed out waiting for SCD41 value"))
+        {
+            debug!("MQTT: receiver got val: {:?}", val);
+
+            // Serialize the message to JSON
+            let mut buf = [0u8; 1024];
+            let message = match serde_json_core::to_slice(&val, &mut buf)
+                .map(|_size| buf.as_slice())
+                .map_err(|err| match err {
+                    BufferFull => error!("MQTT: serialized value exceeded 1024 bytes"),
+                    error => error!("MQTT: serialization error: {:?}", error),
+                }) {
+                Ok(message) => message,
+                Err(()) => continue, // Can't send this value, try again with the next
+            };
+            debug!("MQTT: created payload of size: {} bytes", message.len());
+
+            // Send the message
+            match client
+                .send_message("air/scd41", message, QualityOfService::QoS1, false)
                 .await
             {
-                debug!("MQTT: receiver got val: {:?}", val);
-                let mut message_string: String<5> = String::new();
-                write!(message_string, "{}", val.co2).unwrap();
-                debug!("MQTT: formatted message: {:?}", message_string);
-                let message = message_string.as_bytes();
-
-                match client
-                    .send_message("air", message, QualityOfService::QoS1, false)
-                    .await
-                {
-                    Ok(()) => info!("MQTT: message sent successfully!"),
-                    Err(ReasonCode::NoMatchingSubscribers) => {
-                        error!("MQTT: no matching subscribers")
-                        // Not our fault, so keep trying
-                    }
-                    Err(err) => {
-                        error!("Other MQTT Error: {:?}", err);
-                        break;
-                    }
+                Ok(()) => info!("MQTT: message sent successfully!"),
+                Err(ReasonCode::NoMatchingSubscribers) => {
+                    error!("MQTT: no matching subscribers");
+                    continue; // Not our fault, so we'll try again with the next value
                 }
-            } else {
-                error!("MQTT: timed out waiting for SCD41 value");
-            };
+                Err(err) => {
+                    error!("MQTT: error sending message: {:?}", err);
+                    break; // Re-connect to broker
+                }
+            }
         }
+
+        // The inner loop runs until an error is encountered sending the message
+        warn!("MQTT: re-connecting to broker due to error");
     }
 }

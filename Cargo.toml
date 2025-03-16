@@ -76,6 +76,8 @@ rust-mqtt = { version = "0.3.0", default-features = false, features = [
     "no_std",
 ] }
 embassy-sync = { version = "0.6.2", features = ["defmt"] }
+serde-json-core = { version = "0.6.0", features = ["defmt"] }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
 
 [profile.dev]
 # Rust debug is too slow.

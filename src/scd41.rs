@@ -7,11 +7,12 @@ use esp_hal::{
     Async,
 };
 use scd4x::Scd4xAsync;
+use serde::Serialize;
 
-pub static WATCH: Watch<CriticalSectionRawMutex, AirQuality, 2> = Watch::new();
+pub static WATCH: Watch<CriticalSectionRawMutex, Scd41Measurement, 2> = Watch::new();
 
-#[derive(Debug, Format, Clone)]
-pub struct AirQuality {
+#[derive(Debug, Format, Clone, Serialize)]
+pub struct Scd41Measurement {
     // TODO
     timestamp: Option<()>,
     pub co2: u16,
@@ -77,7 +78,7 @@ async fn scd41_sensor_task(sensor: &mut Scd4xAsync<I2c<'_, Async>, Delay>) -> Re
         let measurement = sensor
             .measurement()
             .await
-            .map(|data| AirQuality {
+            .map(|data| Scd41Measurement {
                 timestamp: None,
                 co2: data.co2,
                 temperature: data.temperature,
