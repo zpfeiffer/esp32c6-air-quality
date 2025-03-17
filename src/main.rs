@@ -5,14 +5,20 @@
 
 #[deny(clippy::mem_forget)]
 use defmt::info;
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::mutex::Mutex;
 use embassy_time::Timer;
 use esp_hal::clock::CpuClock;
+use esp_hal::gpio::AnyPin;
+use esp_hal::i2c::master::{AnyI2c, I2c};
 use esp_hal::rmt::Rmt;
 use esp_hal::rng::Rng;
 use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
+use esp_hal::Async;
 use esp_wifi::EspWifiController;
 use led::SmartLedsAdapter;
 use panic_rtt_target as _;
@@ -41,7 +47,6 @@ async fn main(spawner: Spawner) {
 
     let timer0 = SystemTimer::new(peripherals.SYSTIMER);
     esp_hal_embassy::init(timer0.alarm0);
-
     info!("Embassy initialized!");
 
     let timer1 = TimerGroup::new(peripherals.TIMG0);
@@ -60,11 +65,21 @@ async fn main(spawner: Spawner) {
 
     spawner.must_spawn(mqtt::client(stack));
 
-    spawner.must_spawn(scd41::supervisor(
-        peripherals.I2C0.into(),
-        peripherals.GPIO3.into(),
-        peripherals.GPIO23.into(),
-    ));
+    static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2c<'static, Async>>> = StaticCell::new();
+
+    let i2c_peripheral: AnyI2c = peripherals.I2C0.into();
+    let sda: AnyPin = peripherals.GPIO3.into();
+    let sdc: AnyPin = peripherals.GPIO23.into();
+    let i2c = I2c::new(i2c_peripheral, Default::default())
+        .expect("i2c config should be valid")
+        .with_sda(sda)
+        .with_scl(sdc)
+        .into_async();
+    let i2c_bus = Mutex::new(i2c);
+    let i2c_bus = I2C_BUS.init(i2c_bus);
+    let i2c_dev1 = I2cDevice::new(i2c_bus);
+
+    spawner.must_spawn(scd41::supervisor(i2c_dev1));
 
     let led_pin = peripherals.GPIO8;
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).unwrap();

@@ -1,11 +1,11 @@
 use defmt::{debug, error, info, Format};
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, watch::Watch};
-use embassy_time::{Delay, Duration, Timer};
-use esp_hal::{
-    gpio::AnyPin,
-    i2c::master::{AnyI2c, I2c},
-    Async,
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
+use embassy_sync::{
+    blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex},
+    watch::Watch,
 };
+use embassy_time::{Delay, Duration, Timer};
+use esp_hal::{i2c::master::I2c, Async};
 use scd4x::Scd4xAsync;
 use serde::Serialize;
 
@@ -23,14 +23,8 @@ pub struct Scd41Measurement {
 /// Supervisor task that inititalizes the SCD41 sensor task and restarts
 /// it if it fails.
 #[embassy_executor::task]
-pub async fn supervisor(i2c_peripheral: AnyI2c, sda: AnyPin, sdc: AnyPin) -> ! {
-    let i2c = I2c::new(i2c_peripheral, Default::default())
-        .expect("i2c config should be valid")
-        .with_sda(sda)
-        .with_scl(sdc)
-        .into_async();
-
-    let mut sensor = Scd4xAsync::new(i2c, Delay);
+pub async fn supervisor(i2c_device: I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>) -> ! {
+    let mut sensor = Scd4xAsync::new(i2c_device, Delay);
 
     loop {
         info!("SCD41: starting sensor task...");
@@ -40,7 +34,9 @@ pub async fn supervisor(i2c_peripheral: AnyI2c, sda: AnyPin, sdc: AnyPin) -> ! {
     }
 }
 
-async fn scd41_sensor_task(sensor: &mut Scd4xAsync<I2c<'_, Async>, Delay>) -> Result<!, ()> {
+async fn scd41_sensor_task(
+    sensor: &mut Scd4xAsync<I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>, Delay>,
+) -> Result<!, ()> {
     debug!("SCD41: sending wake-up...");
     sensor.wake_up().await; // Sensor does not acknowledge wake-up
 
