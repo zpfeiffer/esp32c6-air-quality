@@ -1,6 +1,6 @@
 use defmt::{debug, error, info};
 use embassy_executor::Spawner;
-use embassy_net::{Runner, StackResources};
+use embassy_net::{Runner, Stack, StackResources};
 use embassy_time::{Duration, Timer};
 use esp_hal::peripherals::WIFI;
 use esp_wifi::{
@@ -10,8 +10,6 @@ use esp_wifi::{
 
 use static_cell::StaticCell;
 
-use crate::mqtt;
-
 const SSID: &str = env!("SSID");
 const PASSWORD: &str = env!("PSK");
 
@@ -20,7 +18,7 @@ pub async fn wifi_init(
     wifi_peripheral: WIFI,
     spawner: Spawner,
     random_seed: u64,
-) {
+) -> Stack<'static> {
     let (mut controller, interfaces) =
         esp_wifi::wifi::new(esp_wifi_controller, wifi_peripheral).unwrap();
     controller
@@ -52,7 +50,7 @@ pub async fn wifi_init(
         Timer::after(Duration::from_millis(500)).await;
     }
 
-    spawner.must_spawn(mqtt::client(stack));
+    return stack;
 }
 
 #[embassy_executor::task]

@@ -4,7 +4,7 @@
 #![feature(never_type)]
 
 #[deny(clippy::mem_forget)]
-use defmt::{error, info};
+use defmt::info;
 use embassy_executor::Spawner;
 use embassy_time::Timer;
 use esp_hal::clock::CpuClock;
@@ -56,15 +56,15 @@ async fn main(spawner: Spawner) {
     let esp_wifi_controller = ESP_WIFI_CONTROLLER
         .init_with(|| esp_wifi::init(timer1.timer0, rng.clone(), peripherals.RADIO_CLK).unwrap());
 
-    wifi_init(esp_wifi_controller, peripherals.WIFI, spawner, network_seed).await;
+    let stack = wifi_init(esp_wifi_controller, peripherals.WIFI, spawner, network_seed).await;
 
-    spawner
-        .spawn(scd41::supervisor(
-            peripherals.I2C0.into(),
-            peripherals.GPIO3.into(),
-            peripherals.GPIO23.into(),
-        ))
-        .unwrap_or_else(|err| error!("failed to spawn SCD41 sensor task: {:?}", err));
+    spawner.must_spawn(mqtt::client(stack));
+
+    spawner.must_spawn(scd41::supervisor(
+        peripherals.I2C0.into(),
+        peripherals.GPIO3.into(),
+        peripherals.GPIO23.into(),
+    ));
 
     let led_pin = peripherals.GPIO8;
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).unwrap();
