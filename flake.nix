@@ -29,11 +29,15 @@
         pkgs,
         system,
         ...
-      }: {
+      }: let
+        rust-toolchain =
+          pkgs.rust-bin.fromRustupToolchainFile
+          ./rust-toolchain.toml;
+      in {
         _module.args.pkgs = import inputs.nixpkgs {
           inherit system;
           overlays = [
-            # inputs.esp-dev.overlays.default
+            inputs.esp-dev.overlays.default
             inputs.rust-overlay.overlays.default
           ];
           config = {};
@@ -44,17 +48,16 @@
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            (rust-bin.fromRustupToolchainFile
-              ./rust-toolchain.toml)
+            rust-toolchain
 
-            # CLI tool for on-chip debugging and flashing of ARM chips
+            # CLI tool for on-chip debugging and flashing
             probe-rs-tools
 
             # https://docs.esp-rs.org/book/writing-your-own-application/generate-project/esp-generate.html
             esp-generate
 
             # Provided by esp-dev overlay
-            # esp-idf-full
+            esp-idf-esp32c6
           ];
 
           packages = [];
