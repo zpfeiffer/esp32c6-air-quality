@@ -93,11 +93,11 @@ pub async fn client(stack: Stack<'static>) {
             debug!("MQTT: receiver got val: {:?}", val);
 
             // Serialize the message to JSON
-            let mut buf = [0u8; 1024];
+            let mut buf = [0u8; 512];
             let message = match serde_json_core::to_slice(&val, &mut buf)
-                .map(|_size| buf.as_slice())
+                .map(|size| &buf[..size])
                 .map_err(|err| match err {
-                    BufferFull => error!("MQTT: serialized value exceeded 1024 bytes"),
+                    BufferFull => error!("MQTT: serialized value exceeded 512 bytes"),
                     error => error!("MQTT: serialization error: {:?}", error),
                 }) {
                 Ok(message) => message,
