@@ -56,7 +56,17 @@ async fn scd41_sensor_task(
         Err(_) => Err(error!("SCD41: failed to get temperature offset"))?,
     };
 
-    // TODO: set altitude
+    // TODO: get pressure from BME688
+    let ambient_pressure_hpa: u16 = 1015;
+    match sensor.set_ambient_pressure(ambient_pressure_hpa).await {
+        Ok(()) => info!(
+            "SCD41: set ambient pressure to {} hPa",
+            ambient_pressure_hpa
+        ),
+        Err(_) => Err(error!("SCD41: failed to set ambient pressure"))?,
+    }
+
+    // TODO: automatic self calibration?
 
     // TODO: persist settings? or re-init settings on start?
 
