@@ -29,6 +29,7 @@ use wifi::wifi_init;
 
 extern crate alloc;
 
+mod bme680;
 mod led;
 mod mqtt;
 mod scd41;
@@ -36,8 +37,6 @@ mod wifi;
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
-    // generator version: 0.3.0
-
     rtt_target::rtt_init_defmt!();
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
@@ -77,9 +76,12 @@ async fn main(spawner: Spawner) {
         .into_async();
     let i2c_bus = Mutex::new(i2c);
     let i2c_bus = I2C_BUS.init(i2c_bus);
-    let i2c_dev1 = I2cDevice::new(i2c_bus);
 
-    spawner.must_spawn(scd41::supervisor(i2c_dev1));
+    let scd41_i2c_device = I2cDevice::new(i2c_bus);
+    spawner.must_spawn(scd41::supervisor(scd41_i2c_device));
+
+    let bme680_i2c_dev = I2cDevice::new(i2c_bus);
+    spawner.must_spawn(bme680::bme680_sensor_task(bme680_i2c_dev));
 
     let led_pin = peripherals.GPIO8;
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).unwrap();
