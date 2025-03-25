@@ -1,4 +1,5 @@
-use defmt::{debug, error, info, warn};
+use defmt::{debug, error, expect, info, warn};
+use embassy_futures::select::{select, Either};
 use embassy_net::{tcp::TcpSocket, Stack};
 use embassy_time::{Duration, Timer, WithTimeout};
 use rust_mqtt::{
@@ -9,13 +10,19 @@ use rust_mqtt::{
 use serde_json_core::ser::Error::BufferFull;
 use smoltcp::wire::DnsQueryType;
 
+use crate::bme680;
 use crate::scd41;
 
 #[embassy_executor::task]
 pub async fn client(stack: Stack<'static>) {
-    let mut receiver = scd41::WATCH
-        .receiver()
-        .expect("SCD41 Watch should have capacity for MQTT Receiver");
+    let mut scd41_receiver = expect!(
+        scd41::WATCH.receiver(),
+        "SCD41 Watch should have capacity for MQTT Receiver"
+    );
+    let mut bme680_receiver = expect!(
+        bme680::WATCH.receiver(),
+        "BME680 Watch should have capacity for MQTT Receiver"
+    );
 
     loop {
         let mut rx_buffer = [0; 4096];
@@ -52,7 +59,7 @@ pub async fn client(stack: Stack<'static>) {
             rust_mqtt::client::client_config::MqttVersion::MQTTv5,
             CountingRng(20000),
         );
-        config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
+        config.add_max_subscribe_qos(QualityOfService::QoS1);
         config.add_username("air");
         config.add_password("123456");
         config.max_packet_size = 1024;
@@ -84,17 +91,27 @@ pub async fn client(stack: Stack<'static>) {
             },
         }
 
-        while let Ok(val) = receiver
-            .changed()
+        // TODO: this loop needs work
+        while let Ok(val) = select(scd41_receiver.changed(), bme680_receiver.changed())
             .with_timeout(Duration::from_secs(5))
             .await
-            .map_err(|_timeout_error| error!("MQTT: timed out waiting for SCD41 value"))
+            .map_err(|_timeout_error| error!("MQTT: timed out waiting for sensor value"))
         {
             debug!("MQTT: receiver got val: {:?}", val);
 
             // Serialize the message to JSON
             let mut buf = [0u8; 512];
-            let message = match serde_json_core::to_slice(&val, &mut buf)
+            let (topic, serialization_result) = match val {
+                Either::First(scd41_measurement) => (
+                    "air/scd41",
+                    serde_json_core::to_slice(&scd41_measurement, &mut buf),
+                ),
+                Either::Second(bme680_measurement) => (
+                    "air/bme680",
+                    serde_json_core::to_slice(&bme680_measurement, &mut buf),
+                ),
+            };
+            let message = match serialization_result
                 .map(|size| &buf[..size])
                 .map_err(|err| match err {
                     BufferFull => error!("MQTT: serialized value exceeded 512 bytes"),
@@ -107,7 +124,7 @@ pub async fn client(stack: Stack<'static>) {
 
             // Send the message
             match client
-                .send_message("air/scd41", message, QualityOfService::QoS1, false)
+                .send_message(topic, message, QualityOfService::QoS1, false)
                 .await
             {
                 Ok(()) => info!("MQTT: message sent successfully!"),

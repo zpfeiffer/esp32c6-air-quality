@@ -3,10 +3,15 @@ use core::fmt::Debug;
 use bosch_bme680::{AsyncBme680, Configuration, MeasurmentData};
 use defmt::{debug, error, expect, info, Format};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::{
+    blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex},
+    watch::Watch,
+};
 use embassy_time::{Delay, Timer};
 use esp_hal::{i2c::master::I2c, Async};
 use serde::Serialize;
+
+pub static WATCH: Watch<CriticalSectionRawMutex, Bme680Measurement, 2> = Watch::new();
 
 #[derive(Debug, Format, Clone, Serialize)]
 pub struct Bme680Measurement {
@@ -36,8 +41,13 @@ pub async fn bme680_sensor_task(
     );
     info!("BME680: initialized successfully");
 
+    let sender = WATCH.sender();
+    debug!("BME680: obtained Sender for Watch");
+
     loop {
         Timer::after_secs(2).await;
+
+        debug!("BME680: triggering measurement...");
         let measurement = match sensor.measure().await {
             Ok(MeasurmentData {
                 temperature,
@@ -58,5 +68,9 @@ pub async fn bme680_sensor_task(
         };
 
         info!("BME680: got measurement: {:?}", measurement);
+
+        // Update consumers
+        sender.send(measurement);
+        debug!("BME680: sent measurement to Watch")
     }
 }
