@@ -1,4 +1,4 @@
-use defmt::{debug, error, info, Format};
+use defmt::{debug, error, expect, info, warn, Format};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::{
     blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex},
@@ -8,6 +8,8 @@ use embassy_time::{Delay, Duration, Timer};
 use esp_hal::{i2c::master::I2c, Async};
 use scd4x::Scd4xAsync;
 use serde::Serialize;
+
+use crate::bme680::{self, Bme680Measurement};
 
 pub static WATCH: Watch<CriticalSectionRawMutex, Scd41Measurement, 2> = Watch::new();
 
@@ -56,15 +58,10 @@ async fn scd41_sensor_task(
         Err(_) => Err(error!("SCD41: failed to get temperature offset"))?,
     };
 
-    // TODO: get pressure from BME688
-    let ambient_pressure_hpa: u16 = 1015;
-    match sensor.set_ambient_pressure(ambient_pressure_hpa).await {
-        Ok(()) => info!(
-            "SCD41: set ambient pressure to {} hPa",
-            ambient_pressure_hpa
-        ),
-        Err(_) => Err(error!("SCD41: failed to set ambient pressure"))?,
-    }
+    let mut bme680_receiver = expect!(
+        bme680::WATCH.receiver(),
+        "BME680 Watch should have capacity for SCD41 receiver"
+    );
 
     // TODO: automatic self calibration?
 
@@ -80,6 +77,37 @@ async fn scd41_sensor_task(
 
     loop {
         Timer::after(Duration::from_secs(5)).await;
+
+        // Get latest pressure from BME680 and validate
+        let pressure_hpa = match bme680_receiver
+            .try_get()
+            .map(|measurement: Bme680Measurement| measurement.pressure)
+        {
+            Some(pressure) if pressure >= 700.0 && pressure <= 1200.0 => {
+                debug!("SCD41: got pressure measurement: {} hPa", pressure);
+                pressure as u16
+            }
+            Some(pressure) => {
+                warn!("SCD41: got invalid pressure measurement: {} hPa", pressure);
+                if pressure.is_finite() {
+                    let clamped = pressure.clamp(700.0, 1200.0) as u16;
+                    warn!("SCD41: using clamped measurement: {} hPa", clamped);
+                    clamped
+                } else {
+                    warn!("SCD41: using fallback measurement: 1015 hPa");
+                    1015
+                }
+            }
+            None => {
+                error!("SCD41: no BME680 pressure data available, using fallback: 1015 hPa");
+                1015
+            }
+        };
+
+        match sensor.set_ambient_pressure(pressure_hpa).await {
+            Ok(()) => debug!("SCD41: set ambient pressure to {} hPa", pressure_hpa),
+            Err(_) => Err(error!("SCD41: failed to set ambient pressure"))?,
+        }
 
         let measurement = sensor
             .measurement()
