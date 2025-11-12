@@ -57,7 +57,9 @@ pub async fn bme680_sensor_task(
             }) => Bme680Measurement {
                 temperature,
                 humidity,
-                pressure,
+                // bosch-bme680 crate docs are wrong, pressure is returned
+                // in Pa, not hPa. TODO: contribute upstream
+                pressure: pressure / 100.0, // Convert Pa to hPa
                 gas_resistance,
             },
             Err(_error) => {
