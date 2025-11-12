@@ -13,6 +13,10 @@ use crate::bme680::{self, Bme680Measurement};
 
 pub static WATCH: Watch<CriticalSectionRawMutex, Scd41Measurement, 2> = Watch::new();
 
+const PRESSURE_MIN_HPA: f32 = 700.0;
+const PRESSURE_MAX_HPA: f32 = 1200.0;
+const PRESSURE_FALLBACK_HPA: u16 = 1015;
+
 #[derive(Debug, Format, Clone, Serialize)]
 pub struct Scd41Measurement {
     // TODO
@@ -78,30 +82,31 @@ async fn scd41_sensor_task(
     loop {
         Timer::after(Duration::from_secs(5)).await;
 
-        // Get latest pressure from BME680 and validate
-        let pressure_hpa = match bme680_receiver
-            .try_get()
-            .map(|measurement: Bme680Measurement| measurement.pressure)
-        {
-            Some(pressure) if pressure >= 700.0 && pressure <= 1200.0 => {
+        // Get latest pressure from BME680, validate, and clamp if needed
+        let pressure_hpa = if let Some(pressure) = bme680_receiver.try_get().map(|m| m.pressure) {
+            if (PRESSURE_MIN_HPA..=PRESSURE_MAX_HPA).contains(&pressure) {
                 debug!("SCD41: got pressure measurement: {} hPa", pressure);
                 pressure as u16
+            } else if pressure.is_finite() {
+                let clamped = pressure.clamp(PRESSURE_MIN_HPA, PRESSURE_MAX_HPA) as u16;
+                warn!(
+                    "SCD41: invalid pressure {} hPa, clamped to {} hPa",
+                    pressure, clamped
+                );
+                clamped
+            } else {
+                warn!(
+                    "SCD41: invalid pressure, using fallback: {} hPa",
+                    PRESSURE_FALLBACK_HPA
+                );
+                PRESSURE_FALLBACK_HPA
             }
-            Some(pressure) => {
-                warn!("SCD41: got invalid pressure measurement: {} hPa", pressure);
-                if pressure.is_finite() {
-                    let clamped = pressure.clamp(700.0, 1200.0) as u16;
-                    warn!("SCD41: using clamped measurement: {} hPa", clamped);
-                    clamped
-                } else {
-                    warn!("SCD41: using fallback measurement: 1015 hPa");
-                    1015
-                }
-            }
-            None => {
-                error!("SCD41: no BME680 pressure data available, using fallback: 1015 hPa");
-                1015
-            }
+        } else {
+            error!(
+                "SCD41: no BME680 pressure data, using fallback: {} hPa",
+                PRESSURE_FALLBACK_HPA
+            );
+            PRESSURE_FALLBACK_HPA
         };
 
         match sensor.set_ambient_pressure(pressure_hpa).await {
