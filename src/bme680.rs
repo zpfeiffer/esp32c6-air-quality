@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 
 use bosch_bme680::{AsyncBme680, Configuration, MeasurmentData};
-use defmt::{debug, error, expect, info, Format};
+use defmt::{debug, error, expect, info, warn, Format};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_sync::{
     blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex},
@@ -70,6 +70,13 @@ pub async fn bme680_sensor_task(
         };
 
         info!("BME680: got measurement: {:?}", measurement);
+
+        if measurement.pressure <= 300.0 || measurement.pressure >= 1100.0 {
+            warn!(
+                "BME680: pressue measurement outside of accurate range: {} hPa",
+                measurement.pressure
+            );
+        }
 
         // Update consumers
         sender.send(measurement);
