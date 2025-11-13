@@ -67,9 +67,10 @@ async fn scd41_sensor_task(
         "BME680 Watch should have capacity for SCD41 receiver"
     );
 
-    // TODO: automatic self calibration?
-
-    // TODO: persist settings? or re-init settings on start?
+    match sensor.set_automatic_self_calibration(true).await {
+        Ok(()) => info!("SCD41: automatic self calibration enabled"),
+        Err(_) => Err(error!("SCD41: failed to enable automatic self calibration"))?,
+    };
 
     match sensor.start_periodic_measurement().await {
         Ok(()) => info!("SCD41: started periodic measurement"),
