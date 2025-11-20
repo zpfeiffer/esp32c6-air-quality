@@ -83,6 +83,9 @@ embedded-hal-async = { version = "1.0", features = ["defmt-03"] }
 bosch-bme680 = { version = "1.0.4", features = ["embedded-hal-async"] }
 embassy-futures = { version = "0.1.1", features = ["defmt"] }
 
+[build-dependencies]
+config = "0.15.19"
+
 [profile.dev]
 # Rust debug is too slow.
 # For debug builds always builds with some optimization

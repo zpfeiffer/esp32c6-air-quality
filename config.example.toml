@@ -1,0 +1,11 @@
+[wifi]
+ssid = "SSID"
+psk = "PSL"
+
+[mqtt]
+host = "mqtt.example.com"
+port = 1883
+username = "mqtt_username"
+password = "mqtt_password"
+topic_scd41 = "air-quality/scd41"
+topic_bme680 = "air-quality/bme680"

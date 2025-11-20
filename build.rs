@@ -1,8 +1,56 @@
 fn main() {
     linker_be_nice();
+    load_config();
     println!("cargo:rustc-link-arg=-Tdefmt.x");
     // make sure linkall.x is the last linker script (otherwise might cause problems with flip-link)
     println!("cargo:rustc-link-arg=-Tlinkall.x");
+}
+
+fn load_config() {
+    use config::{Config, File};
+    use std::path::Path;
+
+    let config_path = Path::new("config.toml");
+
+    if !config_path.exists() {
+        eprintln!("config.toml not found");
+        return;
+    }
+
+    let settings = Config::builder()
+        .add_source(File::with_name("config"))
+        .build()
+        .expect("Failed to load config.toml");
+
+    // WiFi settings
+    if let Ok(ssid) = settings.get_string("wifi.ssid") {
+        println!("cargo:rustc-env=SSID={}", ssid);
+    }
+    if let Ok(psk) = settings.get_string("wifi.psk") {
+        println!("cargo:rustc-env=PSK={}", psk);
+    }
+
+    // MQTT settings
+    if let Ok(host) = settings.get_string("mqtt.host") {
+        println!("cargo:rustc-env=MQTT_HOST={}", host);
+    }
+    if let Ok(port) = settings.get_int("mqtt.port") {
+        println!("cargo:rustc-env=MQTT_PORT={}", port);
+    }
+    if let Ok(username) = settings.get_string("mqtt.username") {
+        println!("cargo:rustc-env=MQTT_USERNAME={}", username);
+    }
+    if let Ok(password) = settings.get_string("mqtt.password") {
+        println!("cargo:rustc-env=MQTT_PASSWORD={}", password);
+    }
+    if let Ok(topic_scd41) = settings.get_string("mqtt.topic_scd41") {
+        println!("cargo:rustc-env=MQTT_TOPIC_SCD41={}", topic_scd41);
+    }
+    if let Ok(topic_bme680) = settings.get_string("mqtt.topic_bme680") {
+        println!("cargo:rustc-env=MQTT_TOPIC_BME680={}", topic_bme680);
+    }
+
+    println!("cargo:rerun-if-changed=config.toml");
 }
 
 fn linker_be_nice() {

@@ -13,6 +13,24 @@ use smoltcp::wire::DnsQueryType;
 use crate::bme680;
 use crate::scd41;
 
+const MQTT_HOST: &str = env!("MQTT_HOST");
+const MQTT_PORT: u16 = const_parse_u16(env!("MQTT_PORT"));
+const MQTT_USERNAME: &str = env!("MQTT_USERNAME");
+const MQTT_PASSWORD: &str = env!("MQTT_PASSWORD");
+const MQTT_TOPIC_SCD41: &str = env!("MQTT_TOPIC_SCD41");
+const MQTT_TOPIC_BME680: &str = env!("MQTT_TOPIC_BME680");
+
+const fn const_parse_u16(s: &str) -> u16 {
+    let bytes = s.as_bytes();
+    let mut result = 0u16;
+    let mut i = 0;
+    while i < bytes.len() {
+        result = result * 10 + (bytes[i] - b'0') as u16;
+        i += 1;
+    }
+    result
+}
+
 #[embassy_executor::task]
 pub async fn client(stack: Stack<'static>) {
     let mut scd41_receiver = expect!(
@@ -34,7 +52,7 @@ pub async fn client(stack: Stack<'static>) {
         socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
 
         let address = match stack
-            .dns_query("nas.local", DnsQueryType::A)
+            .dns_query(MQTT_HOST, DnsQueryType::A)
             .await
             .map(|a| a[0])
         {
@@ -44,9 +62,9 @@ pub async fn client(stack: Stack<'static>) {
                 continue;
             }
         };
-        info!("resolved nas.local to: {}", address);
+        info!("resolved {} to: {}", MQTT_HOST, address);
 
-        let remote_endpoint = (address, 1883);
+        let remote_endpoint = (address, MQTT_PORT);
         info!("connecting...");
         let connection = socket.connect(remote_endpoint).await;
         if let Err(e) = connection {
@@ -60,8 +78,8 @@ pub async fn client(stack: Stack<'static>) {
             CountingRng(20000),
         );
         config.add_max_subscribe_qos(QualityOfService::QoS1);
-        config.add_username("air");
-        config.add_password("123456");
+        config.add_username(MQTT_USERNAME);
+        config.add_password(MQTT_PASSWORD);
         config.max_packet_size = 1024;
         let mut recv_buffer = [0; 2048];
         let mut write_buffer = [0; 2048];
@@ -103,11 +121,11 @@ pub async fn client(stack: Stack<'static>) {
             let mut buf = [0u8; 512];
             let (topic, serialization_result) = match val {
                 Either::First(scd41_measurement) => (
-                    "air/scd41",
+                    MQTT_TOPIC_SCD41,
                     serde_json_core::to_slice(&scd41_measurement, &mut buf),
                 ),
                 Either::Second(bme680_measurement) => (
-                    "air/bme680",
+                    MQTT_TOPIC_BME680,
                     serde_json_core::to_slice(&bme680_measurement, &mut buf),
                 ),
             };
