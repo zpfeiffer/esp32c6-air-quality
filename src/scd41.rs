@@ -9,7 +9,7 @@ use esp_hal::{i2c::master::I2c, Async};
 use scd4x::Scd4xAsync;
 use serde::Serialize;
 
-use crate::bme680::{self, Bme680Measurement};
+use crate::bme680;
 
 pub static WATCH: Watch<CriticalSectionRawMutex, Scd41Measurement, 2> = Watch::new();
 

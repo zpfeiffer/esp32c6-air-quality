@@ -13,7 +13,7 @@ use embassy_time::Timer;
 use esp_hal::clock::CpuClock;
 use esp_hal::gpio::AnyPin;
 use esp_hal::i2c::master::{AnyI2c, I2c};
-use esp_hal::rmt::Rmt;
+use esp_hal::rmt::{Rmt, TxChannel, TxChannelCreator};
 use esp_hal::rng::Rng;
 use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
@@ -36,12 +36,12 @@ mod scd41;
 mod wifi;
 
 #[esp_hal_embassy::main]
-async fn main(spawner: Spawner) {
+async fn main(spawner: Spawner) -> ! {
+    // Initialize RTT as the defmt channel
     rtt_target::rtt_init_defmt!();
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
-
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
     let timer0 = SystemTimer::new(peripherals.SYSTIMER);
@@ -49,11 +49,8 @@ async fn main(spawner: Spawner) {
     info!("Embassy initialized!");
 
     let timer1 = TimerGroup::new(peripherals.TIMG0);
-
     static RNG: StaticCell<Rng> = StaticCell::new();
     let rng = RNG.init_with(|| esp_hal::rng::Rng::new(peripherals.RNG));
-
-    // Random seed for embassy_net stack
     let network_seed = (rng.random() as u64) << 32 | rng.random() as u64;
 
     static ESP_WIFI_CONTROLLER: StaticCell<EspWifiController<'static>> = StaticCell::new();
@@ -61,11 +58,9 @@ async fn main(spawner: Spawner) {
         .init_with(|| esp_wifi::init(timer1.timer0, rng.clone(), peripherals.RADIO_CLK).unwrap());
 
     let stack = wifi_init(esp_wifi_controller, peripherals.WIFI, spawner, network_seed).await;
-
     spawner.must_spawn(mqtt::client(stack));
 
     static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2c<'static, Async>>> = StaticCell::new();
-
     let i2c_peripheral: AnyI2c = peripherals.I2C0.into();
     let sda: AnyPin = peripherals.GPIO3.into();
     let sdc: AnyPin = peripherals.GPIO23.into();
@@ -74,8 +69,7 @@ async fn main(spawner: Spawner) {
         .with_sda(sda)
         .with_scl(sdc)
         .into_async();
-    let i2c_bus = Mutex::new(i2c);
-    let i2c_bus = I2C_BUS.init(i2c_bus);
+    let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
 
     let scd41_i2c_device = I2cDevice::new(i2c_bus);
     spawner.must_spawn(scd41::supervisor(scd41_i2c_device));
@@ -83,14 +77,21 @@ async fn main(spawner: Spawner) {
     let bme680_i2c_dev = I2cDevice::new(i2c_bus);
     spawner.must_spawn(bme680::bme680_sensor_task(bme680_i2c_dev));
 
+    let rmt_peripheral = peripherals.RMT;
+    let rmt = Rmt::new(rmt_peripheral, Rate::from_mhz(80)).unwrap();
     let led_pin = peripherals.GPIO8;
-    let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).unwrap();
+    led_rainbow_loop(led_pin.into(), rmt.channel0).await;
+}
 
+async fn led_rainbow_loop<T: TxChannel>(
+    led_pin: AnyPin,
+    tx_channel_creator: impl TxChannelCreator<'static, T, AnyPin>,
+) -> ! {
     // Num LEDs (1) * num channels (r,g,b -> 3) * pulses per channel (8) = 24
     // + 1 additional pulse for end delimiter = 25
     let rmt_buffer = [0u32; 25];
 
-    let mut led = SmartLedsAdapter::new(rmt.channel0, led_pin, rmt_buffer);
+    let mut led = SmartLedsAdapter::new(tx_channel_creator, led_pin, rmt_buffer);
 
     let mut color = Hsv {
         hue: 0,
