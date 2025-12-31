@@ -6,8 +6,7 @@ use core::{fmt::Debug, slice::IterMut};
 
 use esp_hal::{
     clock::Clocks,
-    gpio::{Level, OutputPin},
-    peripheral::Peripheral,
+    gpio::{interconnect::PeripheralOutput, Level, OutputPin},
     rmt::{Error as RmtError, PulseCode, TxChannel, TxChannelConfig, TxChannelCreator},
 };
 use smart_leds::{SmartLedsWrite, RGB8};
@@ -52,12 +51,12 @@ where
     /// Create a new adapter object that drives the pin using the RMT channel.
     pub fn new<C, O>(
         channel: C,
-        pin: impl Peripheral<P = O> + 'd,
+        pin: impl PeripheralOutput<'d>,
         rmt_buffer: [u32; BUFFER_SIZE],
     ) -> SmartLedsAdapter<TX, BUFFER_SIZE>
     where
         O: OutputPin + 'd,
-        C: TxChannelCreator<'d, TX, O>,
+        C: TxChannelCreator<'d, TX>,
     {
         let config = TxChannelConfig::default()
             .with_clk_divider(1)

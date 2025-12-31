@@ -15,7 +15,7 @@ const PASSWORD: &str = env!("PSK");
 
 pub async fn wifi_init(
     esp_wifi_controller: &'static mut EspWifiController<'static>,
-    wifi_peripheral: WIFI,
+    wifi_peripheral: WIFI<'static>,
     spawner: Spawner,
     random_seed: u64,
 ) -> Stack<'static> {

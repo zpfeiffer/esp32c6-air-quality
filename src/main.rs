@@ -12,7 +12,7 @@ use embassy_sync::mutex::Mutex;
 use embassy_time::Timer;
 use esp_hal::clock::CpuClock;
 use esp_hal::gpio::AnyPin;
-use esp_hal::i2c::master::{AnyI2c, I2c};
+use esp_hal::i2c::master::I2c;
 use esp_hal::rmt::{Rmt, TxChannel, TxChannelCreator};
 use esp_hal::rng::Rng;
 use esp_hal::time::Rate;
@@ -61,10 +61,9 @@ async fn main(spawner: Spawner) -> ! {
     spawner.must_spawn(mqtt::client(stack));
 
     static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2c<'static, Async>>> = StaticCell::new();
-    let i2c_peripheral: AnyI2c = peripherals.I2C0.into();
     let sda: AnyPin = peripherals.GPIO3.into();
     let sdc: AnyPin = peripherals.GPIO23.into();
-    let i2c = I2c::new(i2c_peripheral, Default::default())
+    let i2c = I2c::new(peripherals.I2C0, Default::default())
         .expect("i2c config should be valid")
         .with_sda(sda)
         .with_scl(sdc)
@@ -80,18 +79,18 @@ async fn main(spawner: Spawner) -> ! {
     let rmt_peripheral = peripherals.RMT;
     let rmt = Rmt::new(rmt_peripheral, Rate::from_mhz(80)).unwrap();
     let led_pin = peripherals.GPIO8;
-    led_rainbow_loop(led_pin.into(), rmt.channel0).await;
+    led_rainbow_loop(led_pin, rmt.channel0).await;
 }
 
-async fn led_rainbow_loop<T: TxChannel>(
-    led_pin: AnyPin,
-    tx_channel_creator: impl TxChannelCreator<'static, T, AnyPin>,
+async fn led_rainbow_loop<T: TxChannel, P: esp_hal::gpio::OutputPin + 'static>(
+    led_pin: P,
+    tx_channel_creator: impl TxChannelCreator<'static, T>,
 ) -> ! {
     // Num LEDs (1) * num channels (r,g,b -> 3) * pulses per channel (8) = 24
     // + 1 additional pulse for end delimiter = 25
     let rmt_buffer = [0u32; 25];
 
-    let mut led = SmartLedsAdapter::new(tx_channel_creator, led_pin, rmt_buffer);
+    let mut led = SmartLedsAdapter::new::<_, P>(tx_channel_creator, led_pin, rmt_buffer);
 
     let mut color = Hsv {
         hue: 0,
