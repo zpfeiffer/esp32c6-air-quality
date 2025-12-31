@@ -19,8 +19,8 @@ use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::Async;
+use esp_hal_smartled::{smart_led_buffer, SmartLedsAdapter};
 use esp_wifi::EspWifiController;
-use led::SmartLedsAdapter;
 use panic_rtt_target as _;
 use smart_leds::hsv::{hsv2rgb, Hsv};
 use smart_leds::{brightness, gamma, SmartLedsWrite};
@@ -30,7 +30,6 @@ use wifi::wifi_init;
 extern crate alloc;
 
 mod bme680;
-mod led;
 mod mqtt;
 mod scd41;
 mod wifi;
@@ -77,7 +76,7 @@ async fn main(spawner: Spawner) -> ! {
     spawner.must_spawn(bme680::bme680_sensor_task(bme680_i2c_dev));
 
     let rmt_peripheral = peripherals.RMT;
-    let rmt = Rmt::new(rmt_peripheral, Rate::from_mhz(80)).unwrap();
+    let rmt = Rmt::new(rmt_peripheral, Rate::from_mhz(80)).expect("RMT0 should initialize");
     let led_pin = peripherals.GPIO8;
     led_rainbow_loop(led_pin, rmt.channel0).await;
 }
@@ -86,11 +85,8 @@ async fn led_rainbow_loop<T: TxChannel, P: esp_hal::gpio::OutputPin + 'static>(
     led_pin: P,
     tx_channel_creator: impl TxChannelCreator<'static, T>,
 ) -> ! {
-    // Num LEDs (1) * num channels (r,g,b -> 3) * pulses per channel (8) = 24
-    // + 1 additional pulse for end delimiter = 25
-    let rmt_buffer = [0u32; 25];
-
-    let mut led = SmartLedsAdapter::new::<_, P>(tx_channel_creator, led_pin, rmt_buffer);
+    let rmt_buffer = smart_led_buffer!(1);
+    let mut led = SmartLedsAdapter::new(tx_channel_creator, led_pin, rmt_buffer);
 
     let mut color = Hsv {
         hue: 0,
