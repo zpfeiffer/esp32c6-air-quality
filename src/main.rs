@@ -3,6 +3,8 @@
 #![feature(impl_trait_in_assoc_type)]
 #![feature(never_type)]
 
+// Recommended by esp_hal docs, as some esp_hal types rely on Drop
+// implementations to not leave hardware in undefined states
 #[deny(clippy::mem_forget)]
 use defmt::info;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
