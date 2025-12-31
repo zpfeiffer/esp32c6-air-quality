@@ -13,7 +13,6 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::Timer;
 use esp_hal::clock::CpuClock;
-use esp_hal::gpio::AnyPin;
 use esp_hal::i2c::master::I2c;
 use esp_hal::rmt::{Rmt, TxChannel, TxChannelCreator};
 use esp_hal::rng::Rng;
@@ -62,25 +61,18 @@ async fn main(spawner: Spawner) -> ! {
     spawner.must_spawn(mqtt::client(stack));
 
     static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2c<'static, Async>>> = StaticCell::new();
-    let sda: AnyPin = peripherals.GPIO3.into();
-    let sdc: AnyPin = peripherals.GPIO23.into();
     let i2c = I2c::new(peripherals.I2C0, Default::default())
         .expect("i2c config should be valid")
-        .with_sda(sda)
-        .with_scl(sdc)
+        .with_sda(peripherals.GPIO3)
+        .with_scl(peripherals.GPIO23)
         .into_async();
     let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
 
-    let scd41_i2c_device = I2cDevice::new(i2c_bus);
-    spawner.must_spawn(scd41::supervisor(scd41_i2c_device));
+    spawner.must_spawn(scd41::supervisor(I2cDevice::new(i2c_bus)));
+    spawner.must_spawn(bme680::bme680_sensor_task(I2cDevice::new(i2c_bus)));
 
-    let bme680_i2c_dev = I2cDevice::new(i2c_bus);
-    spawner.must_spawn(bme680::bme680_sensor_task(bme680_i2c_dev));
-
-    let rmt_peripheral = peripherals.RMT;
-    let rmt = Rmt::new(rmt_peripheral, Rate::from_mhz(80)).expect("RMT0 should initialize");
-    let led_pin = peripherals.GPIO8;
-    led_rainbow_loop(led_pin, rmt.channel0).await;
+    let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).expect("RMT0 should initialize");
+    led_rainbow_loop(peripherals.GPIO8, rmt.channel0).await;
 }
 
 async fn led_rainbow_loop<T: TxChannel, P: esp_hal::gpio::OutputPin + 'static>(
