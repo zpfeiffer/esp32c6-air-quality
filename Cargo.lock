@@ -22,6 +22,7 @@ dependencies = [
  "esp-alloc",
  "esp-hal",
  "esp-hal-embassy",
+ "esp-hal-smartled",
  "esp-wifi",
  "heapless",
  "panic-rtt-target",
@@ -838,6 +839,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "esp-hal-smartled"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5e8261ac8fbb69fdbcd3fbd427a6fc3df7576d186567e9d3bf3bc9577e744ef"
+dependencies = [
+ "defmt 1.0.1",
+ "document-features",
+ "esp-hal",
+ "smart-leds-trait",
 ]
 
 [[package]]

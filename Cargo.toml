@@ -69,6 +69,7 @@ esp-wifi = { version = "0.14.0", features = [
 heapless = { version = "0.8.0", default-features = false }
 static_cell = { version = "2.1.0", features = ["nightly"] }
 smart-leds = "0.4.0"
+esp-hal-smartled = { version = "0.15.0", features = ["defmt", "esp32c6"] }
 ws2812-spi = "0.5.0"
 scd4x = { version = "0.4.0", features = ["embedded-hal-async", "scd41"] }
 rust-mqtt = { version = "0.3.0", default-features = false, features = [
